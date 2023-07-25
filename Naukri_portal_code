@@ -1,0 +1,120 @@
+from selenium import webdriver
+import pandas as pd
+import time
+from time import sleep
+from selenium.webdriver.common.by import By
+from selenium.webdriver import ActionChains
+
+def extract_from_nauri(user,passcode,jobdesgn,yrs_exp,fresh = 'recent', url="https://www.naukri.com",scrap_page=10):
+    driver = webdriver.Chrome()
+    driver.get(url)
+    driver.maximize_window()
+
+    # Click on Log-In
+    driver.find_element(By.XPATH,"//a[@id='login_Layer']").click()
+    time.sleep(5)
+
+    # Input your Detail
+    driver.find_element(By.XPATH,"//input[@placeholder='Enter your active Email ID / Username']").send_keys(user) # Input Username
+    driver.find_element(By.XPATH, "//input[@placeholder='Enter your password']").send_keys(passcode) # Input Password
+    driver.find_element(By.XPATH,"//button[@type='submit']").click() # CLick on Log in Button
+    time.sleep(5)
+
+    # Move cursor to Job Search Bar
+    action = ActionChains(driver)
+    type_job_loc = "//span[@class='nI-gNb-sb__placeholder']"
+    driver.find_element(By.XPATH, type_job_loc).click()
+    time.sleep(3)
+
+    # Input Designation
+    job_type_loc =  "//input[@placeholder='Enter keyword / designation / companies']"
+    driver.find_element(By.XPATH,job_type_loc).send_keys(jobdesgn)
+    time.sleep(3)
+    
+    # Print Similar items
+    similar = driver.find_elements(By.XPATH,"//div[contains(@class,'nI-gNb-search-bar')]//li//div")
+    similar_list = [i.get_attribute('title') for i in similar]
+    
+    for i in similar_list:
+        print(f'Do checkout for "{i}"')
+    print()
+    
+    # Click on Search
+    search_loc = "//span[normalize-space()='Search']"
+    driver.find_element(By.XPATH, search_loc).click()
+
+    time.sleep(5)
+
+    try:
+        # Check for recent
+        driver.execute_script("window.scrollBy(0,1700)","")
+        time.sleep(2)
+        freshness = driver.find_element(By.XPATH,"//input[@id='filter-freshnessFor']")
+        
+        chain = ActionChains(driver)
+        chain.move_to_element(freshness).click().perform()
+        chain.move_to_element(freshness).click().perform()
+        time.sleep(2)
+
+        chain.move_to_element(driver.find_element(By.XPATH,"//div[@id='dp_filter-freshness'][1]//div/ul/li[5]")).click().perform()
+        time.sleep(5)
+        
+        dragger=driver.find_element(By.XPATH,"//div[@class='handle']")
+        chain.move_to_element(dragger).click_and_hold().pause(1).drag_and_drop_by_offset(dragger,(((yrs_exp)*7)-210),0).perform()
+        time.sleep(5)
+
+        total_listing = driver.find_element(By.XPATH, "/html[1]/body[1]/div[1]/div[4]/div[1]/div[1]/section[2]/div[1]/div[1]/span[1]").text
+        pages = int(int(total_listing.split(" ")[-1])/(int(total_listing.split(' ')[2])))
+        
+        print(f'Total Job postings are {total_listing.split(" ")[-1]}')
+
+        loop = pages if scrap_page > pages else scrap_page
+
+        job_title = []
+        job_link = []
+        company = []
+        experience = []
+        salary = []
+        location = []
+        skills = []
+
+        i=0
+        
+        while i<loop:
+            
+            jobs = driver.find_elements(By.XPATH,"//article")            
+
+            for j in range(len(jobs)):
+
+                job_title.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/div[1]/a[1]').text) 
+
+                job_link.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/div[1]/a[1]').get_attribute('href'))
+
+                company.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/div[1]/div[1]/a[1]').text)
+
+                experience.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/ul[1]/li[1]/span[1]').text)
+
+                salary.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/ul[1]/li[2]/span[1]').text )
+
+                location.append(driver.find_element(By.XPATH, f'//article[{j+1}]/div[1]/ul[1]/li[3]/span[1]').text)
+
+                skill = [z.text for z in driver.find_elements(By.XPATH, f'//article[{j+1}]/ul[1]/li')]
+
+                skills.append(','.join(skill))
+
+            driver.execute_script("window.scrollBy(0,4800)","")
+            time.sleep(5)
+            next_button = driver.find_element(By.XPATH,"//a[@class='fright fs14 btn-secondary br2']")
+            chain = ActionChains(driver)
+            chain.move_to_element(next_button).click().perform()
+            time.sleep(5)
+
+            i+=1
+
+    except Exception as e:
+        print(e)
+
+    finally:
+        df = pd.DataFrame({'Title' : job_title,'Experience' : experience,'skills' : skills,
+                       'Salary' : salary,'Location' : location,'URL' : job_link })
+    return df
